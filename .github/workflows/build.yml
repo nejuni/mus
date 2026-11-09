@@ -1,0 +1,73 @@
+name: Build APK
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+jobs:
+  build:
+    # pinned so the label migration to a newer Ubuntu image can't change the build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GRADLE_VERSION: 8.11.1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      # Gradle itself is cached after the first successful download, so later runs never hit the network for it
+      - name: Cache Gradle distribution
+        id: gdist
+        uses: actions/cache@v5
+        with:
+          path: ~/gradle-dist
+          key: gradle-dist-${{ env.GRADLE_VERSION }}
+      - name: Install Gradle (mirrors + retries; falls back to the runner's preinstalled Gradle)
+        run: |
+          DEST="$HOME/gradle-dist"
+          BIN="$DEST/gradle-${GRADLE_VERSION}/bin"
+          if [ ! -x "$BIN/gradle" ]; then
+            mkdir -p "$DEST"
+            F="$RUNNER_TEMP/gradle-${GRADLE_VERSION}-bin.zip"
+            ok=0
+            for round in 1 2 3; do
+              for url in \
+                "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+                "https://mirrors.cloud.tencent.com/gradle/gradle-${GRADLE_VERSION}-bin.zip" \
+                "https://repo.huaweicloud.com/gradle/gradle-${GRADLE_VERSION}-bin.zip" \
+                "https://mirrors.aliyun.com/gradle/gradle-${GRADLE_VERSION}-bin.zip" \
+                "https://github.com/gradle/gradle-distributions/releases/download/v${GRADLE_VERSION}/gradle-${GRADLE_VERSION}-bin.zip" \
+                "https://downloads.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"; do
+                rm -f "$F"
+                if curl -fsSL --retry 2 --retry-all-errors --retry-delay 3 --connect-timeout 15 --max-time 240 -o "$F" "$url" \
+                   && unzip -tq "$F" > /dev/null 2>&1; then
+                  echo "downloaded from $url"; ok=1; break 2
+                fi
+                echo "download failed from $url"
+              done
+              echo "round $round failed, waiting before retry"; sleep 20
+            done
+            if [ "$ok" = 1 ]; then
+              unzip -q "$F" -d "$DEST"
+            fi
+          fi
+          if [ -x "$BIN/gradle" ]; then
+            echo "$BIN" >> "$GITHUB_PATH"
+          else
+            echo "::warning::Gradle ${GRADLE_VERSION} could not be downloaded, using the runner's preinstalled Gradle"
+            command -v gradle > /dev/null || { echo "No Gradle available"; exit 1; }
+          fi
+      - name: Install Android 16 (API 36) platform
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-36" "build-tools;36.0.0"
+      # caching only: Gradle itself was installed above
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build
+        run: gradle --version && gradle assembleRelease --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mlib-apk
+          path: app/build/outputs/apk/release/*.apk
