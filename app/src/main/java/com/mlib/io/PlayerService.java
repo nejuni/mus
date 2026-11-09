@@ -36,6 +36,7 @@ public final class PlayerService extends Service {
     static final String A_NEXT = "com.mlib.io.NEXT";
     static final String A_PREV = "com.mlib.io.PREV";
     static final String A_STOP = "com.mlib.io.STOP";
+    static final String A_TOGGLE = "com.mlib.io.TOGGLE";
     private static final String CH = "playback";
     private static final int NID = 1;
 
@@ -117,6 +118,16 @@ public final class PlayerService extends Service {
             public void onStop() {
                 Player.stop();
             }
+
+            @Override
+            public void onPlay() {
+                Player.resume();
+            }
+
+            @Override
+            public void onPause() {
+                Player.pause();
+            }
         });
     }
 
@@ -130,6 +141,8 @@ public final class PlayerService extends Service {
             Player.next();
         } else if (A_PREV.equals(a)) {
             Player.prev();
+        } else if (A_TOGGLE.equals(a)) {
+            Player.toggle();
         } else if (A_STOP.equals(a)) {
             Player.stop();
         } else if (A_PLAY.equals(a)) {
@@ -170,6 +183,7 @@ public final class PlayerService extends Service {
             return;
         }
         stopping = false;
+        Player.paused = false;
         registerNoisy();
         session.setActive(true);
         requestFocus();
@@ -230,6 +244,29 @@ public final class PlayerService extends Service {
                 }
             }
         });
+    }
+
+    /** Pause / resume from the notification, lock screen or headset. Only works once the song is prepared. */
+    void setPaused(boolean p) {
+        MediaPlayer m = mp;
+        Player.Track t = Player.cur();
+        if (m == null || !prepared || t == null) return;
+        try {
+            if (p) {
+                m.pause();
+            } else {
+                requestFocus();
+                m.setVolume(1f, 1f);
+                m.start();
+            }
+        } catch (Exception e) {
+            return;
+        }
+        pausedByFocus = false;
+        Player.paused = p;
+        updateSession(t, !p);
+        ensureForeground(t); // refreshes the pause / play icon
+        Player.changed();
     }
 
     void shutdown() {
@@ -339,8 +376,10 @@ public final class PlayerService extends Service {
         if (b != null) mb.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, b);
         session.setMetadata(mb.build());
         session.setPlaybackState(new PlaybackState.Builder()
-                .setActions(PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP)
-                .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_BUFFERING, position(), 1f)
+                .setActions(PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP
+                        | PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE)
+                .setState(!playing && Player.paused ? PlaybackState.STATE_PAUSED
+                        : playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_BUFFERING, position(), playing ? 1f : 0f)
                 .build());
     }
 
@@ -369,8 +408,10 @@ public final class PlayerService extends Service {
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setCategory(Notification.CATEGORY_TRANSPORT)
                 .addAction(action(R.drawable.ic_prev, "Previous", A_PREV, 1))
-                .addAction(action(R.drawable.ic_stop, "Stop", A_STOP, 2))
+                .addAction(Player.paused ? action(R.drawable.ic_play, "Play", A_TOGGLE, 4)
+                        : action(R.drawable.ic_pause, "Pause", A_TOGGLE, 4))
                 .addAction(action(R.drawable.ic_next, "Next", A_NEXT, 3))
+                .addAction(action(R.drawable.ic_stop, "Stop", A_STOP, 2))
                 .setStyle(new Notification.MediaStyle()
                         .setMediaSession(session.getSessionToken())
                         .setShowActionsInCompactView(0, 1, 2));

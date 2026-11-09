@@ -1,6 +1,6 @@
 # mlib - Music Library + minimal player
 
-Tiny dependency-free Android app (plain Java, no AndroidX) that lists your music by Albums / Artists / Songs and plays it with a deliberately minimal player: a queue with previous / stop / next, nothing else (no shuffle, repeat, pause or sleep timer).
+Tiny dependency-free Android app (plain Java, no AndroidX) that lists your music by Albums / Artists / Songs and plays it with a deliberately minimal player: a queue with previous / stop / next, nothing else (no shuffle, repeat or sleep timer; pause is only in the notification, lock screen and headset controls).
 
 ## Build with GitHub
 1. Create a new GitHub repo and upload everything in this folder (keep the `.github/workflows/build.yml` path).
@@ -22,6 +22,6 @@ Tiny dependency-free Android app (plain Java, no AndroidX) that lists your music
 - **Mini player:** appears above the search bar while something plays: previous, stop, next and a thin progress line. Tap it to open the queue.
 - **Queue:** tap a song to jump to it, drag the grip on the right to reorder, tap the cross to remove. The current song is highlighted. Back closes the queue.
 - **Stop** clears the queue and ends playback. When the queue ends playback stops by itself. Previous restarts the song if it has played for more than 3 seconds.
-- Keeps playing with the screen off (foreground media service) and can be controlled from the notification, lock screen and headset buttons. It stops when headphones are unplugged and pauses briefly for calls or other audio.
+- Keeps playing with the screen off (foreground media service) and can be controlled from the notification (previous, pause or play, next, stop), the lock screen and headset buttons. It stops when headphones are unplugged and pauses briefly for calls or other audio.
 - Android 13+ asks once to allow notifications; playback works without it, you just won't see the notification.
 - Unplayable or missing files are skipped.

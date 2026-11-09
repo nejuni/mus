@@ -29,6 +29,8 @@ final class Player {
     static int index = -1;
     /** true from the moment something is started until stop / end of queue. */
     static boolean active;
+    /** true while the user has paused (notification / lock screen / headset). */
+    static boolean paused;
     /** UI refresh hook, set by the activity while it is visible. */
     static Runnable listener;
 
@@ -51,6 +53,7 @@ final class Player {
         queue.addAll(t);
         index = Math.max(0, Math.min(start, queue.size() - 1));
         active = true;
+        paused = false;
         changed();
         Intent i = new Intent(c, PlayerService.class).setAction(PlayerService.A_PLAY);
         c.startForegroundService(i);
@@ -79,6 +82,7 @@ final class Player {
     }
 
     private static void startCur() {
+        paused = false;
         changed();
         PlayerService s = PlayerService.inst;
         if (s != null) s.playCurrent(); // otherwise the pending service start plays queue[index]
@@ -148,8 +152,27 @@ final class Player {
         changed();
     }
 
+    static void pause() {
+        setPaused(true);
+    }
+
+    static void resume() {
+        setPaused(false);
+    }
+
+    static void toggle() {
+        setPaused(!paused);
+    }
+
+    private static void setPaused(boolean p) {
+        if (!active || paused == p) return;
+        PlayerService s = PlayerService.inst;
+        if (s != null) s.setPaused(p);
+    }
+
     static void stop() {
         active = false;
+        paused = false;
         queue.clear();
         index = -1;
         PlayerService s = PlayerService.inst;
@@ -160,6 +183,7 @@ final class Player {
     /** The service died without us asking: just forget the queue. */
     static void reset() {
         active = false;
+        paused = false;
         queue.clear();
         index = -1;
         changed();
